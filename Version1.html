@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Robot Brain Lab: Markov Decision Processes</title>
+<style>
+:root{--bg:#faf8f4;--card:#fff;--tx:#1f1d1a;--mut:#6b665e;--ac:#6c4fe0;--gd:#2a9d8f;--rd:#e0457b;--bd:#e6e1d8;--off:#efe9de;--wall:#5a5566;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14131a;--card:#1f1d27;--tx:#f1eee8;--mut:#a09bab;--bd:#33303f;--off:#2a2736;--wall:#6d6879}}
+:root[data-theme="dark"]{--bg:#14131a;--card:#1f1d27;--tx:#f1eee8;--mut:#a09bab;--bd:#33303f;--off:#2a2736;--wall:#6d6879}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:1.7rem;line-height:1.15;margin:8px 0}h2{font-size:1.15rem;margin:0 0 8px}
+.sub{color:var(--mut);margin:0 0 12px}.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px;margin:14px 0}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px}
+.chip{flex:none;border:1px solid var(--bd);background:var(--off);color:var(--tx);border-radius:999px;padding:7px 12px;font:inherit;font-size:.9rem;cursor:pointer}
+.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+code,.f{font-family:ui-monospace,Menlo,monospace;font-size:.82rem;background:var(--off);border-radius:8px;padding:8px;display:block;overflow-x:auto;white-space:nowrap;margin-top:8px}
+#grid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:8px 0}
+.cell{position:relative;aspect-ratio:1;border-radius:10px;border:2px solid transparent;background:var(--off);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.68rem;line-height:1.1;cursor:pointer;user-select:none;overflow:hidden}
+.cell .ar{font-size:1.25rem;line-height:1}.cell.sel{border-color:var(--ac)}
+.cell .s{position:absolute;top:2px;left:4px;font-size:.6rem;font-weight:700;color:var(--ac)}
+.cell .bot{position:absolute;font-size:1.5rem;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(108,79,224,.25)}
+.cell.t{color:#fff;font-weight:700;font-size:.95rem}
+.row{display:flex;gap:8px;flex-wrap:wrap}.btn{border:0;border-radius:12px;padding:10px 14px;font:inherit;font-weight:600;cursor:pointer;background:var(--ac);color:#fff;flex:1;min-width:90px}
+.btn.s{background:var(--off);color:var(--tx);border:1px solid var(--bd)}
+label{display:block;font-size:.85rem;margin-top:10px;color:var(--mut)}label b{color:var(--tx);float:right}
+input[type=range]{width:100%;accent-color:var(--ac)}
+#info,#stats{font-size:.88rem;background:var(--off);border-radius:10px;padding:8px 10px;margin-top:8px;min-height:2.4em}
+.exp button{display:block;width:100%;text-align:left;margin:6px 0;padding:10px;border-radius:10px;border:1px dashed var(--gd);background:none;color:var(--tx);font:inherit;font-size:.9rem;cursor:pointer}
+.q{margin:12px 0}.q p{margin:0 0 6px;font-weight:600}.q button{display:block;width:100%;text-align:left;margin:4px 0;padding:9px;border-radius:10px;border:1px solid var(--bd);background:var(--off);color:var(--tx);font:inherit;font-size:.9rem}
+.q .ok{background:var(--gd);color:#fff}.q .no{background:#c0392b;color:#fff}.fb{font-size:.85rem;color:var(--mut)}
+</style></head><body><main>
+<h1>🤖 Robot Brain Lab</h1>
+<p class="sub">Markov Decision Processes: the math behind game AI, robots, and how chatbots are tuned with RLHF. Build a world, then watch a robot work out the best plan.</p>
+
+<div class="card"><h2>1 · Six ideas, one brain</h2>
+<div class="chips" id="chips"></div><p id="expl" style="min-height:96px;margin:8px 0 0"></p>
+<code>V(s) = max<sub>a</sub> Σ P(s'|s,a) · [ R(s') + γ·V(s') ]</code></div>
+
+<div class="card"><h2>2 · The lab</h2>
+<p class="sub" style="margin-bottom:4px">Pick a tool, tap cells to build the world. Tap with 🔍 to see how a cell's value is computed. 🎯 +10, 🕳 −10.</p>
+<div class="chips" id="tools"></div>
+<div id="grid"></div>
+<div id="info">Press <b>Solve</b> to let the robot think.</div>
+<div class="row" style="margin-top:10px"><button class="btn" id="solve">⚡ Solve</button><button class="btn s" id="sweep">One sweep</button><button class="btn s" id="clear">Reset</button></div>
+<p class="sub" style="margin:8px 0 0;font-size:.85rem" id="meta"></p>
+<label>Discount γ (patience) <b id="vg"></b></label><input type="range" id="g" min="0" max="99" value="90">
+<label>Slip chance (noise) <b id="vn"></b></label><input type="range" id="n" min="0" max="80" value="20">
+<label>Living reward per step <b id="vl"></b></label><input type="range" id="l" min="-30" max="5" value="-1">
+<div class="row" style="margin-top:12px"><button class="btn" id="agent" style="background:var(--gd)">🤖 Release robot</button></div>
+<div id="stats">Robot has not run yet.</div></div>
+
+<div class="card exp"><h2>3 · Experiments</h2>
+<button data-s="90,0,-1">🧗 No slipping: does it hug the cliff?</button>
+<button data-s="90,40,-1">🧊 Slippery floor: watch the route change</button>
+<button data-s="20,0,0">🙈 Short-sighted (γ = 0.2): the goal vanishes</button>
+<button data-s="95,10,-30">😵 Living costs −3 per step: pit looks attractive</button>
+<button data-s="95,10,0">🛋 No step cost: lazy but safe</button>
+</div>
+
+<div class="card"><h2>4 · Quick check</h2><div id="quiz"></div></div>
+<div class="card"><h2>Where this runs in the real world</h2><p style="margin:0">Reinforcement learning is MDPs plus learning. It trains game agents, robot controllers, ad and recommender policies, data-center cooling and chip placement, and the RLHF stage that tunes chatbots toward helpful answers.</p></div>
+</main>
+<script>
+const R=5,C=6,N=R*C,$=id=>document.getElementById(id);
+const D=[[-1,0],[0,1],[1,0],[0,-1]],AR=["▲","▶","▼","◀"],AN=["up","right","down","left"];
+const steps=[["States","Where the robot can be: each grid cell is one state. The robot always knows which cell it is in."],["Actions","In each state it picks up, right, down or left. Walls and edges just bump it back."],["Noise (transitions)","The floor is slippery: with the slip chance, the robot veers 90° left or right of where it meant to go. This randomness is the “Markov” transition model P(s'|s,a)."],["Rewards","Entering 🎯 gives +10, 🕳 gives −10, and every other step pays the living reward, usually a small cost that says “hurry”."],["Policy","A policy says which action to take in each state. The arrows you see are the best policy found. Solving an MDP means finding it."],["Value & Bellman","V(s) is the expected total future reward from s with the best policy. Bellman: a state's value = best action's average of (reward + γ × value of where you land). Sweep that over all cells until nothing changes: value iteration."]];
+steps.forEach((s,i)=>{const b=document.createElement("button");b.className="chip";b.textContent=s[0];b.onclick=()=>{[...$("chips").children].forEach((c,j)=>c.classList.toggle("on",i==j));$("expl").textContent=s[1]};$("chips").appendChild(b)});$("chips").children[0].click();
+const tools=[["i","🔍 Inspect"],["w","🧱 Wall"],["g","🎯 Goal"],["p","🕳 Pit"],["s","🤖 Start"],["e","⌫ Erase"]];let tool="i";
+tools.forEach(([k,t])=>{const b=document.createElement("button");b.className="chip"+(k=="i"?" on":"");b.textContent=t;b.onclick=()=>{tool=k;[...$("tools").children].forEach(c=>c.classList.toggle("on",c===b))};$("tools").appendChild(b)});
+let T=new Array(N).fill(0),start=24,V=new Array(N).fill(0),it=0,delta=0,sel=null,pos=null,timer=null,st,stats;
+function layout(){T.fill(0);for(let c=1;c<5;c++)T[4*C+c]=3;T[4*C+5]=2;T[2*C+2]=1;start=4*C}
+const P=()=>({g:+$("g").value/100,n:+$("n").value/100,l:+$("l").value/10});
+function step(s,d){const r=(s/C|0)+D[d][0],c=s%C+D[d][1];if(r<0||r>=R||c<0||c>=C)return s;const t=r*C+c;return T[t]==1?s:t}
+const rew=(t,p)=>T[t]==2?10:T[t]==3?-10:p.l,val=t=>T[t]>=2?0:V[t];
+function q(s,a,p){let x=0;for(const [d,w] of [[a,1-p.n],[(a+1)%4,p.n/2],[(a+3)%4,p.n/2]]){if(!w)continue;const t=step(s,d);x+=w*(rew(t,p)+p.g*val(t))}return x}
+function sweep(){const p=P(),nv=V.slice();let dl=0;for(let s=0;s<N;s++)if(T[s]==0){nv[s]=Math.max(...[0,1,2,3].map(a=>q(s,a,p)));dl=Math.max(dl,Math.abs(nv[s]-V[s]))}V=nv;it++;delta=dl}
+function best(s){const p=P(),qs=[0,1,2,3].map(a=>q(s,a,p)),m=Math.max(...qs);if(m-Math.min(...qs)<1e-6)return -1;return qs.indexOf(m)}
+function solve(){V.fill(0);it=0;delta=0;do{sweep()}while(delta>1e-5&&it<400);resetStats();render()}
+function resetStats(){stats={n:0,sum:0,goal:0,pit:0,out:0};showStats()}
+function showStats(){$("stats").textContent=stats.n?`Episodes ${stats.n} · avg return ${(stats.sum/stats.n).toFixed(1)} · 🎯 ${Math.round(100*stats.goal/stats.n)}% · 🕳 ${Math.round(100*stats.pit/stats.n)}%${stats.out?` · ⏱ ${stats.out} timeouts`:""}`:"Robot has not run yet."}
+function render(){const g=$("grid");g.innerHTML="";for(let s=0;s<N;s++){const d=document.createElement("div");d.className="cell"+(s===sel?" sel":"");d.onclick=()=>click(s);let h="";
+if(T[s]==1){d.style.background="var(--wall)"}
+else if(T[s]>=2){d.classList.add("t");d.style.background=T[s]==2?"rgba(42,157,143,.92)":"rgba(210,60,90,.92)";h=T[s]==2?"🎯 +10":"🕳 −10"}
+else{const v=V[s],a=Math.min(Math.abs(v)/10,1)*.8;d.style.background=it?(v>=0?`rgba(42,157,143,${a})`:`rgba(224,69,123,${a})`):"";if(it){const b=best(s);h=`<span class="ar">${b<0?"·":AR[b]}</span><span>${v.toFixed(1)}</span>`}}
+if(s===start)h+='<span class="s">S</span>';if(s===pos)h+='<span class="bot">🤖</span>';d.innerHTML=h;g.appendChild(d)}
+$("vg").textContent=(+$("g").value/100).toFixed(2);$("vn").textContent=$("n").value+"%";$("vl").textContent=(+$("l").value/10).toFixed(1);
+$("meta").textContent=it?`Sweeps: ${it} · biggest change last sweep: ${delta.toFixed(5)}${delta<1e-5?" ✅ converged":""}`:"";inspect()}
+function inspect(){if(sel==null||T[sel]!=0||!it)return;const p=P(),b=best(sel);$("info").innerHTML=`<b>Cell ${(sel/C|0)+1},${sel%C+1}</b>: `+[0,1,2,3].map(a=>`${AN[a]} ${q(sel,a,p).toFixed(2)}`).map((t,a)=>a==b?`<b>${t} ★</b>`:t).join(" · ")+`<br>Each number = average over slips of (reward + γ·V(next)). V = the best one.`}
+function click(s){if(tool=="i"){sel=s;if(!it)$("info").textContent="Press Solve first, then inspect a cell.";render();return}
+if(s===start&&tool!="s")return;
+if(tool=="w")T[s]=1;else if(tool=="g")T[s]=2;else if(tool=="p")T[s]=3;else if(tool=="e")T[s]=0;else if(tool=="s"&&T[s]==0)start=s;
+stop();if(it)solve();else render()}
+function stop(){if(timer){clearInterval(timer);timer=null;$("agent").textContent="🤖 Release robot"}pos=null}
+$("solve").onclick=()=>{stop();solve()};$("sweep").onclick=()=>{sweep();resetStats();render()};
+$("clear").onclick=()=>{stop();V.fill(0);it=0;delta=0;sel=null;$("info").textContent="Values reset. Try One sweep a few times to see value spread outward from the goal.";resetStats();render()};
+["g","n","l"].forEach(i=>$(i).oninput=()=>{stop();if(it)solve();else render()});
+$("agent").onclick=()=>{if(timer){stop();render();return}if(!stats)resetStats();$("agent").textContent="⏸ Stop robot";let ret=0,k=0;pos=start;render();
+timer=setInterval(()=>{if(pos==null){pos=start;ret=0;k=0;render();return}
+if(T[pos]>=2||k>80){stats.n++;stats.sum+=ret;if(T[pos]==2)stats.goal++;else if(T[pos]==3)stats.pit++;else stats.out++;pos=null;showStats();render();return}
+const p=P();let a=best(pos);if(a<0)a=Math.random()*4|0;const r=Math.random();const d=r<p.n/2?(a+3)%4:r<p.n?(a+1)%4:a;const t=step(pos,d);ret+=rew(t,p);pos=t;k++;render()},220)};
+document.querySelectorAll(".exp button").forEach(b=>b.onclick=()=>{const [g,n,l]=b.dataset.s.split(",");$("g").value=g;$("n").value=n;$("l").value=l;layout();stop();solve();$("grid").scrollIntoView({behavior:"smooth",block:"center"})});
+const Q=[["What does the discount factor γ control?",["How noisy the floor is","How much future rewards count compared with immediate ones","How many cells the grid has"],1,"γ near 1 = patient planner; γ near 0 = only cares about the next step."],["On a slippery floor the robot avoids the path right beside the pit because…",["A slip could push it in, and the expected value counts that risk","Pits are bigger when it is slippery","It forgets the goal"],0,"Value is an average over all slip outcomes, so danger near the pit lowers those cells' values."],["The Bellman update sets a state's value to…",["The reward of the nearest goal","The sum of all cell values","The best action's average of (reward + γ × value of next state)"],2,"Repeating this over all states is value iteration. Values spread outward from the goal."]];
+Q.forEach(([q,o,a,f])=>{const d=document.createElement("div");d.className="q";d.innerHTML="<p></p><div class='fb'></div>";d.firstChild.textContent=q;o.forEach((t,i)=>{const b=document.createElement("button");b.textContent=t;b.onclick=()=>{[...d.querySelectorAll("button")].forEach(x=>x.className="");b.className=i==a?"ok":"no";d.lastChild.textContent=(i==a?"✅ ":"❌ ")+f};d.insertBefore(b,d.lastChild)});$("quiz").appendChild(d)});
+layout();resetStats();render();
+</script></body></html>
